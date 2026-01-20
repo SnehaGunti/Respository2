@@ -1,4 +1,3 @@
-print("Hello World!")
 
 from flask import Flask
 
