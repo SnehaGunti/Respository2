@@ -1,60 +1,91 @@
 
 pipeline {
   agent any
-
   options { timestamps() }
 
   environment {
-    MAIN_BRANCH     = 'main'                 // change if your default branch is different
-    CREDENTIALS_ID  = 'Jenkins'                     // e.g., 'git-ssh-key' or 'github-pat'; leave blank to skip push
-    GIT_USER_NAME   = 'Jenkins CI'
-    GIT_USER_EMAIL  = 'jenkins@example.com'
+    MAIN_BRANCH    = 'main'             // change if your default branch differs
+    CREDENTIALS_ID = 'Jenkins'   // <-- set your Jenkins Credentials ID (SSH)
+    GIT_USER_NAME  = 'SnehaGunti'
+    GIT_USER_EMAIL = 'guntisneha944@gmail.com'
   }
 
   stages {
+
     stage('Stage 1: Checkout & Run on Branch') {
       steps {
-        sh '''
-          set -euxo pipefail
-          echo "Branch (Multibranch): ${BRANCH_NAME}"
-          #  Run your branch code here (replace with your real commands)
-          echo "Running on ${BRANCH_NAME}..."
-          echo " Stage 1 successful"
-        '''
+        // Use bash to avoid "Illegal option -o pipefail" errors
+        sh(
+          script: '''
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            # Determine the current branch name: prefer BRANCH_NAME (multibranch),
+            # else detect from Git (single-branch jobs)
+            CURRENT_BRANCH="${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+            echo "Branch (detected): ${CURRENT_BRANCH}"
+
+            # Your branch tasks go here (replace with real build/test commands)
+            echo "Running on ${CURRENT_BRANCH}..."
+            echo " Stage 1 successful"
+          ''',
+          shell: '/bin/bash'
+        )
       }
     }
 
     stage('Stage 2: Merge current branch -> main & Push') {
+      // Skip Stage 2 if we are already on main
       when {
-        expression { env.BRANCH_NAME != env.MAIN_BRANCH } // skip if already on main
+        expression { 
+          // Guard against null/empty BRANCH_NAME (single-branch freestyle)
+          def br = (env.BRANCH_NAME ?: '')
+          return br && br != env.MAIN_BRANCH
+        }
       }
       steps {
-        sh '''
-          set -euxo pipefail
-          git config user.name  "${GIT_USER_NAME}"
-          git config user.email "${GIT_USER_EMAIL}"
+        sh(
+          script: '''
+            #!/usr/bin/env bash
+            set -euo pipefail
 
-          # Make sure main is up to date locally
-          git fetch origin
-          git checkout -B "${MAIN_BRANCH}" "origin/${MAIN_BRANCH}"
+            CURRENT_BRANCH="${BRANCH_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+            echo "Preparing to merge ${CURRENT_BRANCH} -> ${MAIN_BRANCH}"
 
-          # Merge the feature branch (current build branch) into main
-          git merge --no-ff --no-edit "${BRANCH_NAME}" || {
-            echo " Merge conflict. Resolve manually and re-run."; exit 1;
-          }
+            # User config for merge commit metadata
+            git config user.name  "${GIT_USER_NAME}"
+            git config user.email "${GIT_USER_EMAIL}"
 
-          echo " Stage 2 local merge successful: ${BRANCH_NAME} -> ${MAIN_BRANCH}"
-        '''
+            # Ensure we have up-to-date refs
+            git fetch origin
+
+            # Create/update local main from remote
+            git checkout -B "${MAIN_BRANCH}" "origin/${MAIN_BRANCH}"
+
+            # Merge the feature/current branch into main
+            git merge --no-ff --no-edit "${CURRENT_BRANCH}" || {
+              echo " Merge conflict. Resolve locally and re-run the job."; 
+              exit 1;
+            }
+
+            echo " Stage 2 local merge successful: ${CURRENT_BRANCH} -> ${MAIN_BRANCH}"
+          ''',
+          shell: '/bin/bash'
+        )
 
         script {
           if (env.CREDENTIALS_ID?.trim()) {
-            // Push the merged main back to origin using provided creds
+            // Push merged main to origin using SSH credentials
             sshagent(credentials: [env.CREDENTIALS_ID]) {
-              sh '''
-                set -euxo pipefail
-                git push origin "${MAIN_BRANCH}"
-                echo " Stage 2 push successful: pushed ${MAIN_BRANCH} to origin"
-              '''
+              sh(
+                script: '''
+                  #!/usr/bin/env bash
+                  set -euo pipefail
+                  git push origin "${MAIN_BRANCH}"
+                  echo " Stage 2 push successful: pushed ${MAIN_BRANCH} to origin"
+                ''',
+                shell: '/bin/bash'
+              )
             }
           } else {
             echo ' CREDENTIALS_ID not set — skipping push to origin.'
@@ -65,14 +96,21 @@ pipeline {
 
     stage('Stage 3: Checkout main & Run') {
       steps {
-        sh '''
-          set -euxo pipefail
-          git checkout "${MAIN_BRANCH}"
+        sh(
+          script: '''
+            #!/usr/bin/env bash
+            set -euo pipefail
 
-          #  Run tasks on main (replace with your real commands)
-          echo "Running on ${MAIN_BRANCH}..."
-          echo " Stage 3 successful"
-        '''
+            # Make sure we are on the latest main
+            git fetch origin
+            git checkout -B "${MAIN_BRANCH}" "origin/${MAIN_BRANCH}" || git checkout "${MAIN_BRANCH}"
+
+            # Your "run on main" tasks go here (replace with real commands)
+            echo "Running on ${MAIN_BRANCH}..."
+            echo " Stage 3 successful"
+          ''',
+          shell: '/bin/bash'
+        )
       }
     }
   }
@@ -82,4 +120,5 @@ pipeline {
     failure { echo ' Pipeline failed. Check console output.' }
   }
 }
+``
 
