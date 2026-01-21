@@ -6,7 +6,7 @@ pipeline {
 
   environment {
     MAIN_BRANCH     = 'main'                 // change if your default branch is different
-    CREDENTIALS_ID  = ''                     // e.g., 'git-ssh-key' or 'github-pat'; leave blank to skip push
+    CREDENTIALS_ID  = 'Jenkins'                     // e.g., 'git-ssh-key' or 'github-pat'; leave blank to skip push
     GIT_USER_NAME   = 'Jenkins CI'
     GIT_USER_EMAIL  = 'jenkins@example.com'
   }
