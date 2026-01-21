@@ -2,33 +2,35 @@
 pipeline {
     agent any
 
+    parameters {
+        string(
+            name: 'NUMBERS',
+            defaultValue: '10 20',
+            description: 'Enter two integers separated by a space (e.g., "10 20")'
+        )
+    }
+
     options {
-        // Removed ansiColor because it's not a valid option in your setup
         timestamps()
     }
 
-    parameters {
-        string(name: 'NUMBERS', defaultValue: '10 20', description: 'Space-separated integers to add (e.g., "10 20 -3 5")')
-    }
-
     stages {
-        stage('Prepare Workspace') {
+        stage('Show Workspace') {
             steps {
-                sh 'ls -la'
+                sh 'pwd && ls -la'
             }
         }
 
         stage('Add Numbers') {
             steps {
-                // Feed numbers non-interactively
-                sh '''
-                    echo "$NUMBERS" | python3 add.py
-                '''
+                // Send NUMBERS to add.py via stdin so Jenkins doesn’t wait for interactive input
+                sh 'echo "$NUMBERS" | python3 add.py'
             }
         }
 
         stage('Check Even/Odd') {
             steps {
+                // Exit code 0 => SUCCESS, 1 => FAILURE
                 sh 'python3 check.py'
             }
         }
@@ -42,15 +44,14 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline marked SUCCESS because the sum is EVEN.'
+            echo ' Sum is EVEN — pipeline SUCCESS.'
         }
         failure {
-            echo 'Pipeline marked FAILURE because the sum is ODD (check.py exited 1).'
+            echo ' Sum is ODD — pipeline FAILURE.'
         }
         always {
-            echo 'Build complete.'
+            echo ' Build complete.'
         }
     }
 }
-``
 
